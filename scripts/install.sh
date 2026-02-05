@@ -10,14 +10,9 @@ INSTALL_DIR="${HOME}/.local/bin"
 echo "Installing Mahoraga..."
 
 # Check for required dependencies
-if ! command -v node &> /dev/null; then
-    echo "Error: Node.js is required but not installed."
-    echo "Please install Node.js (v18 or higher) and try again."
-    exit 1
-fi
-
-if ! command -v npm &> /dev/null && ! command -v pnpm &> /dev/null; then
-    echo "Error: npm or pnpm is required but not installed."
+if ! command -v cargo &> /dev/null; then
+    echo "Error: Rust/Cargo is required but not installed."
+    echo "Please install Rust from https://rustup.rs and try again."
     exit 1
 fi
 
@@ -38,23 +33,13 @@ fi
 
 cd mahoraga
 
-# Install dependencies and build
-echo "Installing dependencies..."
-if command -v pnpm &> /dev/null; then
-    pnpm install
-    pnpm build
-else
-    npm install
-    npm run build
-fi
+# Build the project
+echo "Building Mahoraga..."
+cargo build --release
 
-# Install globally
-echo "Installing globally..."
-if command -v pnpm &> /dev/null; then
-    pnpm link --global
-else
-    npm link
-fi
+# Install binary
+echo "Installing binary to $INSTALL_DIR..."
+cp target/release/mahoraga "$INSTALL_DIR/"
 
 # Cleanup
 cd /
@@ -63,5 +48,6 @@ rm -rf "$TEMP_DIR"
 echo ""
 echo "Mahoraga installed successfully!"
 echo ""
+echo "Make sure $INSTALL_DIR is in your PATH."
 echo "Run 'mahoraga summon' to start the prompt validator."
 echo ""
