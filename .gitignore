@@ -1,8 +1,6 @@
-# Dependencies
-node_modules/
-
-# Build output
-dist/
+# Rust build artifacts
+/target/
+Cargo.lock
 
 # Environment
 .env
@@ -21,9 +19,6 @@ Thumbs.db
 
 # Logs
 *.log
-npm-debug.log*
-pnpm-debug.log*
 
 # Cache
 .cache/
-*.tsbuildinfo
