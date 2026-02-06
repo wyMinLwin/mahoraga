@@ -1,7 +1,7 @@
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Direction, Layout, Rect},
-    style::Style,
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Paragraph, Widget},
 };
@@ -19,6 +19,8 @@ pub struct MainScreen<'a> {
     command_selected: usize,
     command_filter: String,
     active_provider: ProviderType,
+    analyzing_word: &'a str,
+    analyzing_frame: u8,
 }
 
 impl<'a> MainScreen<'a> {
@@ -32,6 +34,8 @@ impl<'a> MainScreen<'a> {
             command_selected: 0,
             command_filter: String::new(),
             active_provider: ProviderType::Azure,
+            analyzing_word: "",
+            analyzing_frame: 0,
         }
     }
 
@@ -60,17 +64,23 @@ impl<'a> MainScreen<'a> {
         self.active_provider = provider;
         self
     }
+
+    pub fn analyzing_animation(mut self, word: &'a str, frame: u8) -> Self {
+        self.analyzing_word = word;
+        self.analyzing_frame = frame;
+        self
+    }
 }
 
 impl Widget for MainScreen<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         // Determine if we have enough space for the full logo
-        let show_logo = area.height >= 25;
+        let show_logo = area.height >= 22;
         let header_height = Header::height(show_logo);
 
         // Layout calculations
-        let has_result = self.result.is_some();
         let show_command_menu = self.state == AppState::CommandMenu;
+        let is_analyzing = self.state == AppState::Analyzing;
 
         // Calculate dynamic prompt height based on newline count
         let line_count = self.prompt.matches('\n').count() + 1;
@@ -78,16 +88,26 @@ impl Widget for MainScreen<'_> {
 
         let mut constraints = vec![
             Constraint::Length(header_height),
-            Constraint::Length(1), // Provider indicator
+            Constraint::Length(2), // Provider indicator + margin bottom
         ];
 
-        if has_result {
-            constraints.push(Constraint::Length(prompt_height.max(3))); // Prompt input
-            constraints.push(Constraint::Length(4)); // Score display
-            constraints.push(Constraint::Min(8));    // Feedback
-        } else {
-            constraints.push(Constraint::Length(prompt_height.max(3))); // Prompt input (min 3 = 1 line + borders)
+        // Analyzing indicator (above input box)
+        if is_analyzing {
+            constraints.push(Constraint::Length(1));
         }
+
+        // Results above input (if available)
+        if let Some(result) = &self.result {
+            constraints.push(Constraint::Length(4)); // Score display (fixed height)
+            // Calculate feedback height based on content
+            let feedback_width = 60.min(area.width.saturating_sub(2)); // Match fixed width
+            let feedback = Feedback::new(&result.improvements, &result.unclear_parts);
+            let feedback_height = feedback.calculate_height(feedback_width);
+            constraints.push(Constraint::Length(feedback_height));
+        }
+
+        // Prompt input always at the end
+        constraints.push(Constraint::Length(prompt_height.max(3)));
 
         // Error bar (only shown when there's an error)
         if self.error.is_some() {
@@ -117,26 +137,52 @@ impl Widget for MainScreen<'_> {
         Paragraph::new(provider_line).render(chunks[chunk_idx], buf);
         chunk_idx += 1;
 
+        // Analyzing indicator (above input box)
+        if is_analyzing {
+            let dots = ".".repeat((self.analyzing_frame + 1) as usize);
+            let analyzing_text = format!("{}{}", self.analyzing_word, dots);
+            let analyzing_line = Line::from(Span::styled(
+                analyzing_text,
+                Style::default()
+                    .fg(theme::PRIMARY)
+                    .add_modifier(Modifier::ITALIC),
+            ));
+            Paragraph::new(analyzing_line).render(chunks[chunk_idx], buf);
+            chunk_idx += 1;
+        }
+
+        // Results above input (if available)
+        if let Some(result) = self.result {
+            // Score display with fixed width
+            let score_area = chunks[chunk_idx];
+            let fixed_score_area = Rect {
+                x: score_area.x,
+                y: score_area.y,
+                width: 60.min(score_area.width), // Fixed width of 60
+                height: score_area.height,
+            };
+            ScoreDisplay::new(result.score).render(fixed_score_area, buf);
+            chunk_idx += 1;
+
+            // Feedback with fixed width
+            let feedback_area = chunks[chunk_idx];
+            let fixed_feedback_area = Rect {
+                x: feedback_area.x,
+                y: feedback_area.y,
+                width: 60.min(feedback_area.width), // Fixed width of 60
+                height: feedback_area.height,
+            };
+            Feedback::new(&result.improvements, &result.unclear_parts)
+                .render(fixed_feedback_area, buf);
+            chunk_idx += 1;
+        }
+
         // Prompt input
-        let is_analyzing = self.state == AppState::Analyzing;
         PromptInput::new(self.prompt, self.cursor_position)
             .focused(self.state != AppState::CommandMenu)
-            .analyzing(is_analyzing)
             .render(chunks[chunk_idx], buf);
         let prompt_chunk = chunks[chunk_idx];
         chunk_idx += 1;
-
-        // Results (if available)
-        if let Some(result) = self.result {
-            // Score display
-            ScoreDisplay::new(result.score).render(chunks[chunk_idx], buf);
-            chunk_idx += 1;
-
-            // Feedback
-            Feedback::new(&result.improvements, &result.unclear_parts)
-                .render(chunks[chunk_idx], buf);
-            chunk_idx += 1;
-        }
 
         // Error bar (only shown when there's an error)
         if let Some(err) = self.error {
