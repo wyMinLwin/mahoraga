@@ -12,7 +12,6 @@ pub struct PromptInput<'a> {
     content: &'a str,
     cursor_position: usize,
     is_focused: bool,
-    is_analyzing: bool,
 }
 
 impl<'a> PromptInput<'a> {
@@ -21,17 +20,11 @@ impl<'a> PromptInput<'a> {
             content,
             cursor_position,
             is_focused: true,
-            is_analyzing: false,
         }
     }
 
     pub fn focused(mut self, focused: bool) -> Self {
         self.is_focused = focused;
-        self
-    }
-
-    pub fn analyzing(mut self, analyzing: bool) -> Self {
-        self.is_analyzing = analyzing;
         self
     }
 }
@@ -44,16 +37,9 @@ impl Widget for PromptInput<'_> {
             theme::BORDER
         };
 
-        let title = if self.is_analyzing {
-            " Analyzing... "
-        } else {
-            ""
-        };
-
         let block = Block::default()
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(border_color))
-            .title(Span::styled(title, Style::default().fg(theme::SECONDARY)));
+            .border_style(Style::default().fg(border_color));
 
         let inner_area = block.inner(area);
         block.render(area, buf);
@@ -68,7 +54,7 @@ impl Widget for PromptInput<'_> {
 
         // Show placeholder with cursor when empty
         if self.content.is_empty() {
-            if self.is_focused && !self.is_analyzing {
+            if self.is_focused {
                 // Show cursor at start position
                 let cursor_span = Span::styled(
                     " ",
@@ -94,7 +80,7 @@ impl Widget for PromptInput<'_> {
         }
 
         // Render content with cursor (supports multi-line)
-        if self.is_focused && !self.is_analyzing {
+        if self.is_focused {
             let lines: Vec<&str> = self.content.split('\n').collect();
             let mut rendered_lines: Vec<Line> = Vec::new();
             let mut char_count = 0;

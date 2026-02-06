@@ -6,9 +6,15 @@ use ratatui::{
     widgets::{Block, Borders, Clear, Paragraph, Widget},
 };
 
-use crate::types::{Config, ProviderType, SettingsField};
+use crate::types::{Config, SettingsField};
 use crate::ui::theme;
-use crate::ui::widgets::Header;
+
+/// Returns a centered `Rect` of `width` x `height` within `outer`.
+fn centered_rect(width: u16, height: u16, outer: Rect) -> Rect {
+    let x = outer.x + outer.width.saturating_sub(width) / 2;
+    let y = outer.y + outer.height.saturating_sub(height) / 2;
+    Rect::new(x, y, width.min(outer.width), height.min(outer.height))
+}
 
 pub struct SettingsScreen<'a> {
     config: &'a Config,
@@ -87,26 +93,33 @@ impl<'a> SettingsScreen<'a> {
 
 impl Widget for SettingsScreen<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        // Clear the screen
-        Clear.render(area, buf);
+        // Get fields for current provider
+        let fields = SettingsField::fields_for_provider(self.config.provider.active);
 
-        let show_logo = area.height >= 25;
-        let header_height = Header::height(show_logo);
+        // Compute popup dimensions dynamically
+        let content_height: u16 = fields
+            .iter()
+            .map(|f| if f.is_button() { 1u16 } else { 2u16 })
+            .sum();
+        // borders(2) + status bar(1) + padding(1)
+        let popup_height = (content_height + 4).min(area.height);
+        let popup_width = 60u16.min(area.width.saturating_sub(4));
 
+        let popup_area = centered_rect(popup_width, popup_height, area);
+
+        // Clear only the popup area
+        Clear.render(popup_area, buf);
+
+        // Split popup into form + status bar
         let chunks = Layout::default()
             .direction(Direction::Vertical)
-            .margin(1)
             .constraints([
-                Constraint::Length(header_height),
-                Constraint::Min(10),
+                Constraint::Min(0),
                 Constraint::Length(1),
             ])
-            .split(area);
+            .split(popup_area);
 
-        // Header
-        Header::new(show_logo).render(chunks[0], buf);
-
-        // Settings form
+        // Settings form block
         let form_block = Block::default()
             .borders(Borders::ALL)
             .border_style(Style::default().fg(theme::PRIMARY))
@@ -115,11 +128,8 @@ impl Widget for SettingsScreen<'_> {
                 Style::default().fg(theme::PRIMARY),
             ));
 
-        let form_inner = form_block.inner(chunks[1]);
-        form_block.render(chunks[1], buf);
-
-        // Get fields for current provider
-        let fields = SettingsField::fields_for_provider(self.config.provider.active);
+        let form_inner = form_block.inner(chunks[0]);
+        form_block.render(chunks[0], buf);
 
         // Calculate layout for fields
         let field_constraints: Vec<Constraint> = fields
@@ -226,7 +236,7 @@ impl Widget for SettingsScreen<'_> {
             }
         }
 
-        // Status bar
+        // Status bar (below the form block)
         let status_text = if let Some(msg) = self.message {
             let color = if self.is_error { theme::ERROR } else { theme::SUCCESS };
             Line::styled(msg, Style::default().fg(color))
@@ -242,6 +252,6 @@ impl Widget for SettingsScreen<'_> {
             )
         };
 
-        Paragraph::new(status_text).render(chunks[2], buf);
+        Paragraph::new(status_text).render(chunks[1], buf);
     }
 }

@@ -2,10 +2,24 @@ use std::time::Duration;
 
 use anyhow::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers};
+use rand::seq::SliceRandom;
 use ratatui::{backend::CrosstermBackend, Terminal};
 use tokio::sync::mpsc;
 
 use crate::config::{load_config, reset_config, save_config};
+
+const ANALYZING_SYNONYMS: &[&str] = &[
+    "Scrutinizing",
+    "Dissecting",
+    "Examining",
+    "Evaluating",
+    "Deconstructing",
+    "Appraising",
+    "Assessing",
+    "Investigating",
+    "Elucidating",
+    "Interrogating",
+];
 use crate::providers::{create_provider, Provider};
 use crate::types::{AnalysisResult, AppState, Command, Config, ProviderType, Screen, SettingsField};
 use crate::ui::{MainScreen, SettingsScreen};
@@ -51,6 +65,12 @@ pub struct App {
     settings_is_error: bool,
     /// Working copy of config for settings
     settings_config: Config,
+    /// Animation frame for analyzing state (0, 1, 2 = 1, 2, 3 dots)
+    analyzing_animation_frame: u8,
+    /// Selected synonym for analyzing message
+    analyzing_word: String,
+    /// Tick counter for animation timing
+    animation_tick_counter: u8,
 }
 
 impl App {
@@ -76,6 +96,9 @@ impl App {
             settings_message: None,
             settings_is_error: false,
             settings_config,
+            analyzing_animation_frame: 0,
+            analyzing_word: String::new(),
+            animation_tick_counter: 0,
         })
     }
 
@@ -103,6 +126,15 @@ impl App {
                             }
                         }
                     }
+                }
+            }
+
+            // Update animation frame when analyzing (every ~250ms = 5 ticks at 50ms)
+            if self.state == AppState::Analyzing {
+                self.animation_tick_counter += 1;
+                if self.animation_tick_counter >= 5 {
+                    self.animation_tick_counter = 0;
+                    self.analyzing_animation_frame = (self.analyzing_animation_frame + 1) % 3;
                 }
             }
 
@@ -137,11 +169,23 @@ impl App {
                     .state(self.state)
                     .error(self.error.as_deref())
                     .command_menu(self.command_selected, self.command_filter.clone())
-                    .provider(self.config.provider.active);
+                    .provider(self.config.provider.active)
+                    .analyzing_animation(&self.analyzing_word, self.analyzing_animation_frame);
 
                 frame.render_widget(screen, frame.area());
             }
             Screen::Settings => {
+                // Render main screen as frozen background
+                let bg = MainScreen::new(&self.prompt, self.cursor_position)
+                    .result(self.result.as_ref())
+                    .state(self.state)
+                    .error(self.error.as_deref())
+                    .command_menu(self.command_selected, self.command_filter.clone())
+                    .provider(self.config.provider.active)
+                    .analyzing_animation(&self.analyzing_word, self.analyzing_animation_frame);
+                frame.render_widget(bg, frame.area());
+
+                // Overlay settings popup on top
                 let screen = SettingsScreen::new(&self.settings_config)
                     .selected(self.settings_selected)
                     .editing(self.settings_editing, &self.settings_edit_value, self.settings_cursor)
@@ -380,7 +424,17 @@ impl App {
 
     async fn start_analysis(&mut self, tx: mpsc::Sender<AsyncMessage>) {
         self.state = AppState::Analyzing;
+        self.result = None; // Clear old results
         self.error = None;
+
+        // Select random synonym and reset animation
+        let mut rng = rand::thread_rng();
+        self.analyzing_word = ANALYZING_SYNONYMS
+            .choose(&mut rng)
+            .unwrap_or(&"Analyzing")
+            .to_string();
+        self.analyzing_animation_frame = 0;
+        self.animation_tick_counter = 0;
 
         let config = self.config.clone();
         let prompt = self.prompt.clone();

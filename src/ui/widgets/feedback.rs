@@ -13,11 +13,57 @@ pub struct Feedback<'a> {
     unclear_parts: &'a [String],
 }
 
+// Padding constants
+const PADDING_X: u16 = 1;
+const PADDING_Y: u16 = 1;
+
 impl<'a> Feedback<'a> {
     pub fn new(improvements: &'a [String], unclear_parts: &'a [String]) -> Self {
         Self {
             improvements,
             unclear_parts,
+        }
+    }
+
+    /// Add padding to a rect
+    fn with_padding(area: Rect) -> Rect {
+        Rect {
+            x: area.x + PADDING_X,
+            y: area.y + PADDING_Y,
+            width: area.width.saturating_sub(PADDING_X * 2),
+            height: area.height.saturating_sub(PADDING_Y * 2),
+        }
+    }
+
+    /// Calculate the height needed for a section based on content and width
+    fn calculate_section_height(items: &[String], width: u16) -> u16 {
+        if items.is_empty() {
+            return 0;
+        }
+        // Account for borders (2), padding (2), and bullet (2)
+        let inner_width = width.saturating_sub(4 + PADDING_X * 2 + 2) as usize;
+        let mut total_lines: u16 = 0;
+        for item in items {
+            // Estimate wrapped lines: ceil(text_len / inner_width)
+            let lines = if inner_width > 0 {
+                (item.len() as f32 / inner_width as f32).ceil() as u16
+            } else {
+                1
+            };
+            total_lines += lines.max(1);
+        }
+        total_lines + 2 + (PADDING_Y * 2) // +2 for borders, +padding
+    }
+
+    /// Calculate total height needed for this widget
+    pub fn calculate_height(&self, width: u16) -> u16 {
+        let improvements_height = Self::calculate_section_height(self.improvements, width);
+        let unclear_height = Self::calculate_section_height(self.unclear_parts, width);
+
+        if improvements_height == 0 && unclear_height == 0 {
+            4 // Empty state with message
+        } else {
+            improvements_height + unclear_height
         }
     }
 }
@@ -53,6 +99,7 @@ impl Widget for Feedback<'_> {
                 ));
 
             let inner = improvements_block.inner(chunks[chunk_idx]);
+            let padded = Self::with_padding(inner);
             improvements_block.render(chunks[chunk_idx], buf);
 
             let lines: Vec<Line> = self
@@ -67,7 +114,7 @@ impl Widget for Feedback<'_> {
                 .collect();
 
             let paragraph = Paragraph::new(Text::from(lines)).wrap(Wrap { trim: false });
-            paragraph.render(inner, buf);
+            paragraph.render(padded, buf);
 
             chunk_idx += 1;
         }
@@ -89,6 +136,7 @@ impl Widget for Feedback<'_> {
             };
 
             let inner = unclear_block.inner(target_chunk);
+            let padded = Self::with_padding(inner);
             unclear_block.render(target_chunk, buf);
 
             let lines: Vec<Line> = self
@@ -103,7 +151,7 @@ impl Widget for Feedback<'_> {
                 .collect();
 
             let paragraph = Paragraph::new(Text::from(lines)).wrap(Wrap { trim: false });
-            paragraph.render(inner, buf);
+            paragraph.render(padded, buf);
         }
 
         // If neither has content, show a message
@@ -117,13 +165,14 @@ impl Widget for Feedback<'_> {
                 ));
 
             let inner = empty_block.inner(area);
+            let padded = Self::with_padding(inner);
             empty_block.render(area, buf);
 
             let paragraph = Paragraph::new(Text::styled(
                 "No feedback available.",
                 Style::default().fg(theme::MUTED),
             ));
-            paragraph.render(inner, buf);
+            paragraph.render(padded, buf);
         }
     }
 }

@@ -9,9 +9,10 @@ use ratatui::{
 use crate::ui::theme;
 
 const LOGO: &str = r#"
- ╔╦╗╔═╗╦ ╦╔═╗╦═╗╔═╗╔═╗╔═╗
- ║║║╠═╣╠═╣║ ║╠╦╝╠═╣║ ╦╠═╣
- ╩ ╩╩ ╩╩ ╩╚═╝╩╚═╩ ╩╚═╝╩ ╩
+ ██   ██  ██████  ██  ██  ██████  ████    ██████  ██████  ██████
+ ███ ███  ██  ██  ██  ██  ██  ██  ██ ██   ██  ██  ██      ██  ██
+ ██ █ ██  ██████  ██████  ██  ██  ████    ██████  ██ ███  ██████
+ ██   ██  ██  ██  ██  ██  ██████  ██ ██   ██  ██  ██████  ██  ██
 "#;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -36,7 +37,7 @@ impl Widget for Header {
                 .collect();
 
             let version_line = Line::styled(
-                format!("         v{}", VERSION),
+                format!(" v{}", VERSION),
                 Style::default().fg(theme::SECONDARY),
             );
 
@@ -62,7 +63,7 @@ impl Header {
     /// Get the height of the header
     pub fn height(show_logo: bool) -> u16 {
         if show_logo {
-            4 // Logo (3 lines) + version
+            5 // Logo (4 lines) + version
         } else {
             1
         }
