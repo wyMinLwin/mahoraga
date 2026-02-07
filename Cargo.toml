@@ -5,7 +5,7 @@ edition = "2021"
 description = "A terminal-based prompt validation and improvement tool"
 authors = ["Mahoraga Contributors"]
 license = "MIT"
-repository = "https://github.com/example/mahoraga"
+repository = "https://github.com/wyMinLwin/mahoraga"
 keywords = ["tui", "prompt", "llm", "validation"]
 categories = ["command-line-utilities"]
 
