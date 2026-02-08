@@ -1,4 +1,5 @@
 mod app;
+mod commands;
 mod config;
 mod providers;
 mod types;
@@ -19,7 +20,7 @@ use crate::app::App;
 #[derive(Parser)]
 #[command(name = "mahoraga")]
 #[command(author = "Mahoraga Contributors")]
-#[command(version = "0.1.0")]
+#[command(version = env!("CARGO_PKG_VERSION"))]
 #[command(about = "A terminal-based prompt validation and improvement tool", long_about = None)]
 struct Cli {
     #[command(subcommand)]
@@ -30,6 +31,10 @@ struct Cli {
 enum Commands {
     /// Launch the TUI application
     Summon,
+    /// Update mahoraga to the latest version
+    Update,
+    /// Uninstall mahoraga (removes binary and config)
+    Uninstall,
 }
 
 #[tokio::main]
@@ -39,6 +44,12 @@ async fn main() -> Result<()> {
     match cli.command {
         Some(Commands::Summon) | None => {
             run_tui().await?;
+        }
+        Some(Commands::Update) => {
+            commands::run_update().await?;
+        }
+        Some(Commands::Uninstall) => {
+            commands::run_uninstall()?;
         }
     }
 
