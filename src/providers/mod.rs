@@ -67,8 +67,6 @@ pub trait Provider: Send + Sync {
     /// Analyze a prompt and return the analysis result
     async fn analyze(&self, prompt: &str) -> Result<AnalysisResult>;
 
-    /// Get the provider type
-    fn provider_type(&self) -> ProviderType;
 }
 
 /// Create a provider based on configuration

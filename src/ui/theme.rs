@@ -21,9 +21,6 @@ pub const WARNING: Color = Color::Rgb(234, 179, 8);
 /// Background color (dark)
 pub const BACKGROUND: Color = Color::Rgb(17, 17, 17);
 
-/// Surface color (slightly lighter than background)
-pub const SURFACE: Color = Color::Rgb(30, 30, 30);
-
 /// Border color
 pub const BORDER: Color = Color::Rgb(64, 64, 64);
 

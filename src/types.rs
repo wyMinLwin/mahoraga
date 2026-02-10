@@ -11,24 +11,12 @@ pub enum ProviderType {
 }
 
 impl ProviderType {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            ProviderType::Azure => "azure",
-            ProviderType::OpenAI => "openai",
-            ProviderType::Anthropic => "anthropic",
-        }
-    }
-
     pub fn display_name(&self) -> &'static str {
         match self {
             ProviderType::Azure => "Azure OpenAI",
             ProviderType::OpenAI => "OpenAI",
             ProviderType::Anthropic => "Anthropic",
         }
-    }
-
-    pub fn all() -> &'static [ProviderType] {
-        &[ProviderType::Azure, ProviderType::OpenAI, ProviderType::Anthropic]
     }
 
     pub fn next(&self) -> ProviderType {
