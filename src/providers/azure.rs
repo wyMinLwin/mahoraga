@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use reqwest::Client;
 use serde_json::json;
 
-use crate::types::{AnalysisResult, AzureConfig, ProviderType};
+use crate::types::{AnalysisResult, AzureConfig};
 use super::{parse_analysis_response, Provider, SYSTEM_PROMPT};
 
 pub struct AzureProvider {
@@ -84,9 +84,5 @@ impl Provider for AzureProvider {
             .context("No content in Azure response")?;
 
         parse_analysis_response(content)
-    }
-
-    fn provider_type(&self) -> ProviderType {
-        ProviderType::Azure
     }
 }

@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use reqwest::Client;
 use serde_json::json;
 
-use crate::types::{AnalysisResult, AnthropicConfig, ProviderType};
+use crate::types::{AnalysisResult, AnthropicConfig};
 use super::{parse_analysis_response, Provider, SYSTEM_PROMPT};
 
 const ANTHROPIC_API_URL: &str = "https://api.anthropic.com/v1/messages";
@@ -70,9 +70,5 @@ impl Provider for AnthropicProvider {
             .context("No content in Anthropic response")?;
 
         parse_analysis_response(content)
-    }
-
-    fn provider_type(&self) -> ProviderType {
-        ProviderType::Anthropic
     }
 }

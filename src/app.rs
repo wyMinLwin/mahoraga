@@ -20,7 +20,7 @@ const ANALYZING_SYNONYMS: &[&str] = &[
     "Elucidating",
     "Interrogating",
 ];
-use crate::providers::{create_provider, Provider};
+use crate::providers::create_provider;
 use crate::types::{AnalysisResult, AppState, Command, Config, ProviderType, Screen, SettingsField};
 use crate::ui::{MainScreen, SettingsScreen};
 

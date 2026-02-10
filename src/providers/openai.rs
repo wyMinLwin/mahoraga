@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use reqwest::Client;
 use serde_json::json;
 
-use crate::types::{AnalysisResult, OpenAIConfig, ProviderType};
+use crate::types::{AnalysisResult, OpenAIConfig};
 use super::{parse_analysis_response, Provider, SYSTEM_PROMPT};
 
 const OPENAI_API_URL: &str = "https://api.openai.com/v1/chat/completions";
@@ -71,9 +71,5 @@ impl Provider for OpenAIProvider {
             .context("No content in OpenAI response")?;
 
         parse_analysis_response(content)
-    }
-
-    fn provider_type(&self) -> ProviderType {
-        ProviderType::OpenAI
     }
 }
