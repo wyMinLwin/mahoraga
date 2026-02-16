@@ -20,13 +20,26 @@ const ANALYZING_SYNONYMS: &[&str] = &[
     "Elucidating",
     "Interrogating",
 ];
+
+const ADAPTING_SYNONYMS: &[&str] = &[
+    "Restructuring",
+    "Reformulating",
+    "Refining",
+    "Reorganizing",
+    "Polishing",
+    "Clarifying",
+    "Streamlining",
+    "Reshaping",
+];
 use crate::providers::create_provider;
 use crate::types::{AnalysisResult, AppState, Command, Config, ProviderType, Screen, SettingsField};
+use crate::ui::widgets::{Feedback, Header};
 use crate::ui::{MainScreen, SettingsScreen};
 
-/// Message from async analysis task
+/// Message from async tasks
 enum AsyncMessage {
     AnalysisComplete(Result<AnalysisResult>),
+    AdaptComplete(Result<String>),
 }
 
 /// Main application structure
@@ -41,6 +54,8 @@ pub struct App {
     cursor_position: usize,
     /// Analysis result
     result: Option<AnalysisResult>,
+    /// Last analyzed prompt (for /adapt command)
+    last_analyzed_prompt: Option<String>,
     /// Error message
     error: Option<String>,
     /// Should quit
@@ -71,6 +86,8 @@ pub struct App {
     analyzing_word: String,
     /// Tick counter for animation timing
     animation_tick_counter: u8,
+    /// Whether the current prompt came from /adapt (clear on Enter)
+    prompt_is_adapted: bool,
 }
 
 impl App {
@@ -84,6 +101,7 @@ impl App {
             prompt: String::new(),
             cursor_position: 0,
             result: None,
+            last_analyzed_prompt: None,
             error: None,
             should_quit: false,
             config,
@@ -99,6 +117,7 @@ impl App {
             analyzing_animation_frame: 0,
             analyzing_word: String::new(),
             animation_tick_counter: 0,
+            prompt_is_adapted: false,
         })
     }
 
@@ -126,11 +145,29 @@ impl App {
                             }
                         }
                     }
+                    AsyncMessage::AdaptComplete(result) => {
+                        // Only apply if still in Adapting state (user didn't cancel)
+                        if self.state == AppState::Adapting {
+                            self.state = AppState::Idle;
+                            match result {
+                                Ok(adapted) => {
+                                    self.prompt = adapted;
+                                    self.cursor_position = self.prompt.len();
+                                    self.result = None;
+                                    self.error = None;
+                                    self.prompt_is_adapted = true;
+                                }
+                                Err(e) => {
+                                    self.error = Some(e.to_string());
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
-            // Update animation frame when analyzing (every ~250ms = 5 ticks at 50ms)
-            if self.state == AppState::Analyzing {
+            // Update animation frame when analyzing/adapting (every ~250ms = 5 ticks at 50ms)
+            if self.state == AppState::Analyzing || self.state == AppState::Adapting {
                 self.animation_tick_counter += 1;
                 if self.animation_tick_counter >= 5 {
                     self.animation_tick_counter = 0;
@@ -161,6 +198,23 @@ impl App {
         Ok(())
     }
 
+    fn prompt_bottom_y(&self, area: ratatui::layout::Rect) -> u16 {
+        let show_logo = area.height >= 22;
+        let header_height = Header::height(show_logo);
+        let mut y: u16 = 1 + header_height + 2; // margin + header + provider
+
+        if let Some(ref result) = self.result {
+            y += 4; // score display
+            let feedback_width = 60.min(area.width.saturating_sub(2));
+            let feedback = Feedback::new(&result.improvements, &result.unclear_parts);
+            y += feedback.calculate_height(feedback_width);
+        }
+
+        let line_count = self.prompt.matches('\n').count() + 1;
+        let prompt_height = ((line_count as u16) + 2).max(3);
+        y + prompt_height
+    }
+
     fn render(&self, frame: &mut ratatui::Frame) {
         match self.screen {
             Screen::Main => {
@@ -185,11 +239,13 @@ impl App {
                     .analyzing_animation(&self.analyzing_word, self.analyzing_animation_frame);
                 frame.render_widget(bg, frame.area());
 
-                // Overlay settings popup on top
+                // Overlay settings popup below the prompt
+                let prompt_bottom = self.prompt_bottom_y(frame.area());
                 let screen = SettingsScreen::new(&self.settings_config)
                     .selected(self.settings_selected)
                     .editing(self.settings_editing, &self.settings_edit_value, self.settings_cursor)
-                    .message(self.settings_message.as_deref(), self.settings_is_error);
+                    .message(self.settings_message.as_deref(), self.settings_is_error)
+                    .prompt_bottom(prompt_bottom);
 
                 frame.render_widget(screen, frame.area());
             }
@@ -198,8 +254,7 @@ impl App {
 
     async fn handle_main_input(&mut self, key: KeyEvent, tx: &mpsc::Sender<AsyncMessage>) -> Result<()> {
         match self.state {
-            AppState::Analyzing => {
-                // Can only cancel with Escape
+            AppState::Analyzing | AppState::Adapting => {
                 if key.code == KeyCode::Esc {
                     self.state = AppState::Idle;
                 }
@@ -217,6 +272,14 @@ impl App {
                     self.command_filter.clear();
                 } else if self.state == AppState::ShowingResults {
                     self.state = AppState::Idle;
+                } else if self.state == AppState::Idle {
+                    // Dismiss adapted prompt or error
+                    if self.prompt_is_adapted {
+                        self.prompt.clear();
+                        self.cursor_position = 0;
+                        self.prompt_is_adapted = false;
+                    }
+                    self.error = None;
                 }
             }
             KeyCode::Enter => {
@@ -231,6 +294,14 @@ impl App {
                     };
 
                     if let Some(cmd) = cmd {
+                        if cmd == Command::Adapt {
+                            self.prompt.clear();
+                            self.cursor_position = 0;
+                            self.state = AppState::Idle;
+                            self.command_filter.clear();
+                            self.start_adapt(tx.clone()).await;
+                            return Ok(());
+                        }
                         self.execute_command(cmd);
                         self.prompt.clear();
                         self.cursor_position = 0;
@@ -240,6 +311,9 @@ impl App {
                 } else if !self.prompt.is_empty() && self.state != AppState::Analyzing {
                     // Not a command, analyze
                     self.start_analysis(tx.clone()).await;
+                    self.prompt.clear();
+                    self.cursor_position = 0;
+                    self.prompt_is_adapted = false;
                 }
             }
             KeyCode::Char(c) => {
@@ -395,6 +469,7 @@ impl App {
                 self.prompt.clear();
                 self.cursor_position = 0;
                 self.result = None;
+                self.last_analyzed_prompt = None;
                 self.error = None;
                 self.state = AppState::Idle;
             }
@@ -419,6 +494,9 @@ impl App {
                     }
                 }
             }
+            Command::Adapt => {
+                // Handled async in handle_prompt_input before reaching execute_command
+            }
         }
     }
 
@@ -426,6 +504,7 @@ impl App {
         self.state = AppState::Analyzing;
         self.result = None; // Clear old results
         self.error = None;
+        self.last_analyzed_prompt = Some(self.prompt.clone());
 
         // Select random synonym and reset animation
         let mut rng = rand::thread_rng();
@@ -447,6 +526,51 @@ impl App {
             .await;
 
             let _ = tx.send(AsyncMessage::AnalysisComplete(result)).await;
+        });
+    }
+
+    async fn start_adapt(&mut self, tx: mpsc::Sender<AsyncMessage>) {
+        let prompt = match &self.last_analyzed_prompt {
+            Some(p) => p.clone(),
+            None => {
+                self.error = Some("No prompt to adapt. Analyze a prompt first.".to_string());
+                return;
+            }
+        };
+
+        let score = self.result.as_ref().map(|r| r.score).unwrap_or(0);
+        if score <= 30 {
+            self.error = Some(format!(
+                "Score too low ({}%). Prompt must score above 30% to adapt.",
+                score
+            ));
+            return;
+        }
+
+        self.state = AppState::Adapting;
+        self.result = None;
+        self.error = None;
+        self.prompt_is_adapted = false;
+
+        // Select random synonym and reset animation
+        let mut rng = rand::thread_rng();
+        self.analyzing_word = ADAPTING_SYNONYMS
+            .choose(&mut rng)
+            .unwrap_or(&"Adapting")
+            .to_string();
+        self.analyzing_animation_frame = 0;
+        self.animation_tick_counter = 0;
+
+        let config = self.config.clone();
+
+        tokio::spawn(async move {
+            let result = async {
+                let provider = create_provider(&config)?;
+                provider.adapt(&prompt).await
+            }
+            .await;
+
+            let _ = tx.send(AsyncMessage::AdaptComplete(result)).await;
         });
     }
 

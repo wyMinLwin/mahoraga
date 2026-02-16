@@ -80,7 +80,7 @@ impl Widget for MainScreen<'_> {
 
         // Layout calculations
         let show_command_menu = self.state == AppState::CommandMenu;
-        let is_analyzing = self.state == AppState::Analyzing;
+        let is_analyzing = self.state == AppState::Analyzing || self.state == AppState::Adapting;
 
         // Calculate dynamic prompt height based on newline count
         let line_count = self.prompt.matches('\n').count() + 1;
@@ -199,7 +199,7 @@ impl Widget for MainScreen<'_> {
             let menu_height = menu.height();
 
             // Position menu below the prompt input
-            let menu_y = (prompt_chunk.y + prompt_chunk.height).min(area.height.saturating_sub(menu_height + 1));
+            let menu_y = prompt_chunk.y + prompt_chunk.height;
             let menu_width = 50.min(area.width.saturating_sub(4));
             let menu_x = prompt_chunk.x + 1;
 

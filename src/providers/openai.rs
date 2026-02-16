@@ -4,7 +4,7 @@ use reqwest::Client;
 use serde_json::json;
 
 use crate::types::{AnalysisResult, OpenAIConfig};
-use super::{parse_analysis_response, Provider, SYSTEM_PROMPT};
+use super::{parse_analysis_response, Provider, ADAPT_SYSTEM_PROMPT, SYSTEM_PROMPT};
 
 const OPENAI_API_URL: &str = "https://api.openai.com/v1/chat/completions";
 
@@ -71,5 +71,54 @@ impl Provider for OpenAIProvider {
             .context("No content in OpenAI response")?;
 
         parse_analysis_response(content)
+    }
+
+    async fn adapt(&self, prompt: &str) -> Result<String> {
+        if self.config.api_key.is_empty() {
+            anyhow::bail!("OpenAI API key is not configured");
+        }
+
+        let body = json!({
+            "model": self.config.model,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": ADAPT_SYSTEM_PROMPT
+                },
+                {
+                    "role": "user",
+                    "content": format!("Reformat this prompt:\n\n{}", prompt)
+                }
+            ],
+            "temperature": 0.3,
+            "max_tokens": 2000
+        });
+
+        let response = self
+            .client
+            .post(OPENAI_API_URL)
+            .header("Authorization", format!("Bearer {}", self.config.api_key))
+            .header("Content-Type", "application/json")
+            .json(&body)
+            .send()
+            .await
+            .context("Failed to send request to OpenAI")?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let error_text = response.text().await.unwrap_or_default();
+            anyhow::bail!("OpenAI API error ({}): {}", status, error_text);
+        }
+
+        let response_json: serde_json::Value = response
+            .json()
+            .await
+            .context("Failed to parse OpenAI response")?;
+
+        let content = response_json["choices"][0]["message"]["content"]
+            .as_str()
+            .context("No content in OpenAI response")?;
+
+        Ok(content.trim().to_string())
     }
 }
