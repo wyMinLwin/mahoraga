@@ -9,11 +9,13 @@ use ratatui::{
 use crate::types::{Config, SettingsField};
 use crate::ui::theme;
 
-/// Returns a centered `Rect` of `width` x `height` within `outer`.
-fn centered_rect(width: u16, height: u16, outer: Rect) -> Rect {
+/// Returns a `Rect` of `width` x `height` positioned at `start_y` within `outer`.
+/// If the rect would overflow, it clips to outer bounds.
+fn positioned_rect(width: u16, height: u16, start_y: u16, outer: Rect) -> Rect {
     let x = outer.x + outer.width.saturating_sub(width) / 2;
-    let y = outer.y + outer.height.saturating_sub(height) / 2;
-    Rect::new(x, y, width.min(outer.width), height.min(outer.height))
+    let y = start_y.min(outer.y + outer.height.saturating_sub(1));
+    let available_height = (outer.y + outer.height).saturating_sub(y);
+    Rect::new(x, y, width.min(outer.width), height.min(available_height))
 }
 
 pub struct SettingsScreen<'a> {
@@ -24,6 +26,7 @@ pub struct SettingsScreen<'a> {
     cursor_position: usize,
     message: Option<&'a str>,
     is_error: bool,
+    prompt_bottom_y: u16,
 }
 
 impl<'a> SettingsScreen<'a> {
@@ -36,7 +39,13 @@ impl<'a> SettingsScreen<'a> {
             cursor_position: 0,
             message: None,
             is_error: false,
+            prompt_bottom_y: 0,
         }
+    }
+
+    pub fn prompt_bottom(mut self, y: u16) -> Self {
+        self.prompt_bottom_y = y;
+        self
     }
 
     pub fn selected(mut self, field: usize) -> Self {
@@ -105,9 +114,9 @@ impl Widget for SettingsScreen<'_> {
         let popup_height = (content_height + 4).min(area.height);
         let popup_width = 60u16.min(area.width.saturating_sub(4));
 
-        let popup_area = centered_rect(popup_width, popup_height, area);
+        let popup_area = positioned_rect(popup_width, popup_height, self.prompt_bottom_y, area);
 
-        // Clear only the popup area
+        // Clear the popup area
         Clear.render(popup_area, buf);
 
         // Split popup into form + status bar

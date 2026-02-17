@@ -11,6 +11,19 @@ use async_trait::async_trait;
 
 use crate::types::{AnalysisResult, Config, ProviderType};
 
+/// System prompt for adapting/reformatting prompts
+pub const ADAPT_SYSTEM_PROMPT: &str = r#"You are a prompt restructuring assistant. Your job is to reformat and restructure the user's prompt for maximum clarity, without changing its meaning or intent.
+
+Rules:
+- Preserve the original meaning, intent, and all details exactly
+- Improve structure: use clear sections, bullet points, or numbered lists where appropriate
+- Fix grammar, spelling, and punctuation
+- Remove redundancy and tighten wording
+- Add explicit structure (e.g., "Context:", "Task:", "Constraints:", "Output format:") when it helps clarity
+- Do NOT add new requirements, constraints, or information that wasn't in the original
+- Do NOT remove any requirements or constraints from the original
+- Return ONLY the reformatted prompt as plain text — no explanations, no commentary, no markdown code fences"#;
+
 /// System prompt for analyzing prompts
 pub const SYSTEM_PROMPT: &str = r#"You are a strict prompt quality analyzer. Your job is to critically evaluate prompts with high standards. Analyze the given prompt and provide:
 1. A quality score from 0-100 (be strict - most prompts should score below 70)
@@ -67,6 +80,8 @@ pub trait Provider: Send + Sync {
     /// Analyze a prompt and return the analysis result
     async fn analyze(&self, prompt: &str) -> Result<AnalysisResult>;
 
+    /// Adapt/reformat a prompt for clarity without changing meaning
+    async fn adapt(&self, prompt: &str) -> Result<String>;
 }
 
 /// Create a provider based on configuration

@@ -4,7 +4,7 @@ use reqwest::Client;
 use serde_json::json;
 
 use crate::types::{AnalysisResult, AnthropicConfig};
-use super::{parse_analysis_response, Provider, SYSTEM_PROMPT};
+use super::{parse_analysis_response, Provider, ADAPT_SYSTEM_PROMPT, SYSTEM_PROMPT};
 
 const ANTHROPIC_API_URL: &str = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_API_VERSION: &str = "2023-06-01";
@@ -70,5 +70,51 @@ impl Provider for AnthropicProvider {
             .context("No content in Anthropic response")?;
 
         parse_analysis_response(content)
+    }
+
+    async fn adapt(&self, prompt: &str) -> Result<String> {
+        if self.config.api_key.is_empty() {
+            anyhow::bail!("Anthropic API key is not configured");
+        }
+
+        let body = json!({
+            "model": self.config.model,
+            "max_tokens": 2000,
+            "system": ADAPT_SYSTEM_PROMPT,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": format!("Reformat this prompt:\n\n{}", prompt)
+                }
+            ]
+        });
+
+        let response = self
+            .client
+            .post(ANTHROPIC_API_URL)
+            .header("x-api-key", &self.config.api_key)
+            .header("anthropic-version", ANTHROPIC_API_VERSION)
+            .header("Content-Type", "application/json")
+            .json(&body)
+            .send()
+            .await
+            .context("Failed to send request to Anthropic")?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let error_text = response.text().await.unwrap_or_default();
+            anyhow::bail!("Anthropic API error ({}): {}", status, error_text);
+        }
+
+        let response_json: serde_json::Value = response
+            .json()
+            .await
+            .context("Failed to parse Anthropic response")?;
+
+        let content = response_json["content"][0]["text"]
+            .as_str()
+            .context("No content in Anthropic response")?;
+
+        Ok(content.trim().to_string())
     }
 }

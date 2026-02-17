@@ -4,7 +4,7 @@ use reqwest::Client;
 use serde_json::json;
 
 use crate::types::{AnalysisResult, AzureConfig};
-use super::{parse_analysis_response, Provider, SYSTEM_PROMPT};
+use super::{parse_analysis_response, Provider, ADAPT_SYSTEM_PROMPT, SYSTEM_PROMPT};
 
 pub struct AzureProvider {
     config: AzureConfig,
@@ -84,5 +84,61 @@ impl Provider for AzureProvider {
             .context("No content in Azure response")?;
 
         parse_analysis_response(content)
+    }
+
+    async fn adapt(&self, prompt: &str) -> Result<String> {
+        if self.config.url.is_empty() {
+            anyhow::bail!("Azure URL is not configured");
+        }
+        if self.config.api_key.is_empty() {
+            anyhow::bail!("Azure API key is not configured");
+        }
+        if self.config.deployment.is_empty() {
+            anyhow::bail!("Azure deployment is not configured");
+        }
+
+        let url = self.build_url();
+
+        let body = json!({
+            "messages": [
+                {
+                    "role": "system",
+                    "content": ADAPT_SYSTEM_PROMPT
+                },
+                {
+                    "role": "user",
+                    "content": format!("Reformat this prompt:\n\n{}", prompt)
+                }
+            ],
+            "temperature": 0.3,
+            "max_tokens": 2000
+        });
+
+        let response = self
+            .client
+            .post(&url)
+            .header("api-key", &self.config.api_key)
+            .header("Content-Type", "application/json")
+            .json(&body)
+            .send()
+            .await
+            .context("Failed to send request to Azure OpenAI")?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let error_text = response.text().await.unwrap_or_default();
+            anyhow::bail!("Azure API error ({}): {}", status, error_text);
+        }
+
+        let response_json: serde_json::Value = response
+            .json()
+            .await
+            .context("Failed to parse Azure response")?;
+
+        let content = response_json["choices"][0]["message"]["content"]
+            .as_str()
+            .context("No content in Azure response")?;
+
+        Ok(content.trim().to_string())
     }
 }

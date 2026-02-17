@@ -132,6 +132,7 @@ pub enum AppState {
     #[default]
     Idle,
     Analyzing,
+    Adapting,
     ShowingResults,
     CommandMenu,
 }
@@ -144,6 +145,7 @@ pub enum Command {
     Exit,
     Provider,
     Default,
+    Adapt,
 }
 
 impl Command {
@@ -151,6 +153,7 @@ impl Command {
         &[
             Command::Settings,
             Command::Provider,
+            Command::Adapt,
             Command::Clear,
             Command::Default,
             Command::Exit,
@@ -164,6 +167,7 @@ impl Command {
             Command::Exit => "/exit",
             Command::Provider => "/provider",
             Command::Default => "/default",
+            Command::Adapt => "/adapt",
         }
     }
 
@@ -174,6 +178,7 @@ impl Command {
             Command::Exit => "Exit the application",
             Command::Provider => "Switch active provider",
             Command::Default => "Reset to default settings",
+            Command::Adapt => "Reformat prompt without changing meaning",
         }
     }
 }
